@@ -1,0 +1,578 @@
+local function LoadScript()
+    if not game:IsLoaded() then game.Loaded:Wait() end 
+    repeat task.wait(.06) until game:GetService("Players").LocalPlayer 
+    
+    local Http = game:GetService("HttpService")
+    local Players = game:GetService("Players")
+    local TPS = game:GetService("TeleportService")
+    local CoreGui = game:GetService("CoreGui")
+    local UserInputService = game:GetService("UserInputService")
+    local TweenService = game:GetService("TweenService")
+    local LP = Players.LocalPlayer
+    
+    local isTranslatorActive = false
+    local sourceLanguage = "auto"
+    local targetLanguage = "en"
+    
+    local languageData = {
+        {Name = "Detect Language", Code = "auto"},
+        {Name = "English", Code = "en"},
+        {Name = "Spanish", Code = "es"},
+        {Name = "French", Code = "fr"},
+        {Name = "German", Code = "de"},
+        {Name = "Chinese", Code = "zh-cn"},
+        {Name = "Japanese", Code = "ja"},
+        {Name = "Korean", Code = "ko"},
+        {Name = "Russian", Code = "ru"},
+        {Name = "Arabic", Code = "ar"},
+        {Name = "Portuguese", Code = "pt"},
+        {Name = "Italian", Code = "it"},
+        {Name = "Dutch", Code = "nl"},
+        {Name = "Turkish", Code = "tr"},
+        {Name = "Polish", Code = "pl"},
+        {Name = "Ukrainian", Code = "uk"},
+        {Name = "Greek", Code = "el"},
+        {Name = "Hebrew", Code = "iw"},
+        {Name = "Hindi", Code = "hi"},
+        {Name = "Thai", Code = "th"},
+        {Name = "Vietnamese", Code = "vi"}
+    }
+    
+    local languages = {}
+    for _, lang in ipairs(languageData) do
+        languages[lang.Code] = lang.Name
+    end
+    
+    local gv
+    local function req(opt)
+        local fn = (syn and syn.request) or (http and http.request) or http_request or request
+        if fn then return fn(opt) end
+        return Http:RequestAsync(opt)
+    end
+    
+    local function consent(body)
+        local t = {}
+        for tag in body:gmatch('<input type="hidden" name=".-" value=".-">') do
+            local k, v = tag:match('<input type="hidden" name="(.-)" value="(.-)">')
+            t[k] = v
+        end
+        gv = t.v or ""
+    end
+    
+    local function got(url, method, body)
+        method = method or "GET"
+        local res = req({
+            Url = url, 
+            Method = method, 
+            Headers = {cookie = "CONSENT=YES+" .. (gv or "")}, 
+            Body = body
+        })
+        local b = res.Body or res.body or ""
+        if type(b) ~= "string" then b = tostring(b) end
+        if b:match("https://consent.google.com/s") then
+            consent(b)
+            res = req({
+                Url = url, 
+                Method = "GET", 
+                Headers = {cookie = "CONSENT=YES+" .. (gv or "")}
+            })
+        end
+        return res
+    end
+    
+    local function q(data)
+        local s = ""
+        for k, v in pairs(data) do
+            if type(v) == "table" then
+                for _, vv in pairs(v) do
+                    s ..= "&" .. Http:UrlEncode(k) .. "=" .. Http:UrlEncode(vv)
+                end
+            else
+                s ..= "&" .. Http:UrlEncode(k) .. "=" .. Http:UrlEncode(v)
+            end
+        end
+        return s:sub(2)
+    end
+    
+    local jE = function(x) return Http:JSONEncode(x) end
+    local jD = function(x) return Http:JSONDecode(x) end
+    
+    local rpc = "MkEWBc"
+    local root = "https://translate.google.com/"
+    local exec = "https://translate.google.com/_/TranslateWebserverUi/data/batchexecute"
+    local fsid, bl, rid = nil, nil, math.random(1000, 9999)
+    
+    do
+        local b = (got(root).Body or "")
+        fsid = b:match('"FdrFJe":"(.-)"')
+        bl = b:match('"cfb2h":"(.-)"')
+    end
+    
+    local function translate(txt, tgt, src)
+        rid += 10000
+        src = src or "auto"
+        local data = {{txt, src, tgt, true}, {nil}}
+        local freq = {{{rpc, jE(data), nil, "generic"}}}
+        local url = exec .. "?" .. q{
+            rpcids = rpc, 
+            ["f.sid"] = fsid, 
+            bl = bl, 
+            hl = "en", 
+            _reqID = rid - 10000, 
+            rt = "c"
+        }
+        local body = q{["f.req"] = jE(freq)}
+        local res = got(url, "POST", body)
+        local ok, out = pcall(function()
+            local arr = jD((res.Body or ""):match("%[.-%]\n"))
+            return jD(arr[1][3])
+        end)
+        if not ok then return nil end
+        return out[2][1][1][6][1][1]
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "GoogleTranslateUI"
+    screenGui.Parent = CoreGui
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Parent = screenGui
+    mainFrame.BackgroundColor3 = Color3.fromRGB(32, 33, 36)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -120)
+    mainFrame.Size = UDim2.new(0, 300, 0, 280)
+    mainFrame.ClipsDescendants = true
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = mainFrame
+    
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Parent = mainFrame
+    header.BackgroundColor3 = Color3.fromRGB(32, 33, 36)
+    header.BorderSizePixel = 0
+    header.Size = UDim2.new(1, 0, 0, 40)
+    
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 12)
+    headerCorner.Parent = header
+    
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Parent = header
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.Size = UDim2.new(0, 200, 1, 0)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "Google Translate"
+    title.TextColor3 = Color3.fromRGB(232, 234, 237)
+    title.TextSize = 16
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Parent = header
+    closeButton.BackgroundTransparency = 1
+    closeButton.Position = UDim2.new(1, -35, 0, 0)
+    closeButton.Size = UDim2.new(0, 35, 1, 0)
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Text = "×"
+    closeButton.TextColor3 = Color3.fromRGB(232, 234, 237)
+    closeButton.TextSize = 20
+    
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Parent = mainFrame
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Position = UDim2.new(0, 0, 0, 40)
+    contentFrame.Size = UDim2.new(1, 0, 1, -40)
+    
+    local inputFrame = Instance.new("Frame")
+    inputFrame.Name = "InputFrame"
+    inputFrame.Parent = contentFrame
+    inputFrame.BackgroundColor3 = Color3.fromRGB(48, 49, 52)
+    inputFrame.BorderSizePixel = 0
+    inputFrame.Position = UDim2.new(0, 15, 0, 15)
+    inputFrame.Size = UDim2.new(1, -30, 0, 80)
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.Parent = inputFrame
+    
+    local sourceLangButton = Instance.new("TextButton")
+    sourceLangButton.Name = "SourceLangButton"
+    sourceLangButton.Parent = inputFrame
+    sourceLangButton.BackgroundColor3 = Color3.fromRGB(60, 64, 67)
+    sourceLangButton.BorderSizePixel = 0
+    sourceLangButton.Position = UDim2.new(0, 10, 0, 10)
+    sourceLangButton.Size = UDim2.new(0, 90, 0, 25)
+    sourceLangButton.Font = Enum.Font.Gotham
+    sourceLangButton.Text = "Detect"
+    sourceLangButton.TextColor3 = Color3.fromRGB(232, 234, 237)
+    sourceLangButton.TextSize = 12
+    
+    local sourceCorner = Instance.new("UICorner")
+    sourceCorner.CornerRadius = UDim.new(0, 6)
+    sourceCorner.Parent = sourceLangButton
+    
+    local swapButton = Instance.new("TextButton")
+    swapButton.Name = "SwapButton"
+    swapButton.Parent = inputFrame
+    swapButton.BackgroundTransparency = 1
+    swapButton.Position = UDim2.new(0.5, -10, 0, 12)
+    swapButton.Size = UDim2.new(0, 20, 0, 20)
+    swapButton.Font = Enum.Font.GothamBold
+    swapButton.Text = "⇄"
+    swapButton.TextColor3 = Color3.fromRGB(138, 180, 248)
+    swapButton.TextSize = 14
+    
+    local targetLangButton = Instance.new("TextButton")
+    targetLangButton.Name = "TargetLangButton"
+    targetLangButton.Parent = inputFrame
+    targetLangButton.BackgroundColor3 = Color3.fromRGB(60, 64, 67)
+    targetLangButton.BorderSizePixel = 0
+    targetLangButton.Position = UDim2.new(1, -100, 0, 10)
+    targetLangButton.Size = UDim2.new(0, 90, 0, 25)
+    targetLangButton.Font = Enum.Font.Gotham
+    targetLangButton.Text = "English"
+    targetLangButton.TextColor3 = Color3.fromRGB(232, 234, 237)
+    targetLangButton.TextSize = 12
+    
+    local targetCorner = Instance.new("UICorner")
+    targetCorner.CornerRadius = UDim.new(0, 6)
+    targetCorner.Parent = targetLangButton
+    
+    local inputBox = Instance.new("TextBox")
+    inputBox.Name = "InputBox"
+    inputBox.Parent = inputFrame
+    inputBox.BackgroundTransparency = 1
+    inputBox.Position = UDim2.new(0, 10, 0, 40)
+    inputBox.Size = UDim2.new(1, -20, 1, -45)
+    inputBox.Font = Enum.Font.Gotham
+    inputBox.PlaceholderText = "Enter text"
+    inputBox.PlaceholderColor3 = Color3.fromRGB(154, 160, 166)
+    inputBox.Text = ""
+    inputBox.TextColor3 = Color3.fromRGB(232, 234, 237)
+    inputBox.TextSize = 13
+    inputBox.TextXAlignment = Enum.TextXAlignment.Left
+    inputBox.TextYAlignment = Enum.TextYAlignment.Top
+    inputBox.ClearTextOnFocus = false
+    inputBox.MultiLine = true
+    
+    local outputFrame = Instance.new("Frame")
+    outputFrame.Name = "OutputFrame"
+    outputFrame.Parent = contentFrame
+    outputFrame.BackgroundColor3 = Color3.fromRGB(48, 49, 52)
+    outputFrame.BorderSizePixel = 0
+    outputFrame.Position = UDim2.new(0, 15, 0, 110)
+    outputFrame.Size = UDim2.new(1, -30, 0, 80)
+    
+    local outputCorner = Instance.new("UICorner")
+    outputCorner.CornerRadius = UDim.new(0, 8)
+    outputCorner.Parent = outputFrame
+    
+    local outputLabel = Instance.new("TextLabel")
+    outputLabel.Name = "OutputLabel"
+    outputLabel.Parent = outputFrame
+    outputLabel.BackgroundTransparency = 1
+    outputLabel.Position = UDim2.new(0, 10, 0, 10)
+    outputLabel.Size = UDim2.new(1, -20, 1, -45)
+    outputLabel.Font = Enum.Font.Gotham
+    outputLabel.Text = "Translation"
+    outputLabel.TextColor3 = Color3.fromRGB(154, 160, 166)
+    outputLabel.TextSize = 13
+    outputLabel.TextXAlignment = Enum.TextXAlignment.Left
+    outputLabel.TextYAlignment = Enum.TextYAlignment.Top
+    outputLabel.TextWrapped = true
+    
+    local copyButton = Instance.new("TextButton")
+    copyButton.Name = "CopyButton"
+    copyButton.Parent = outputFrame
+    copyButton.BackgroundColor3 = Color3.fromRGB(138, 180, 248)
+    copyButton.BorderSizePixel = 0
+    copyButton.Position = UDim2.new(1, -80, 1, -30)
+    copyButton.Size = UDim2.new(0, 70, 0, 25)
+    copyButton.Font = Enum.Font.Gotham
+    copyButton.Text = "Copy"
+    copyButton.TextColor3 = Color3.fromRGB(32, 33, 36)
+    copyButton.TextSize = 12
+    
+    local copyCorner = Instance.new("UICorner")
+    copyCorner.CornerRadius = UDim.new(0, 6)
+    copyCorner.Parent = copyButton
+    
+    local leftLangFrame = Instance.new("Frame")
+    leftLangFrame.Name = "LeftLangFrame"
+    leftLangFrame.Parent = screenGui
+    leftLangFrame.BackgroundColor3 = Color3.fromRGB(32, 33, 36)
+    leftLangFrame.BorderSizePixel = 0
+    leftLangFrame.Position = UDim2.new(0, 10, 0.5, -150)
+    leftLangFrame.Size = UDim2.new(0, 200, 0, 300)
+    leftLangFrame.Visible = false
+    leftLangFrame.ZIndex = 2
+    
+    local leftLangCorner = Instance.new("UICorner")
+    leftLangCorner.CornerRadius = UDim.new(0, 12)
+    leftLangCorner.Parent = leftLangFrame
+    
+    local rightLangFrame = Instance.new("Frame")
+    rightLangFrame.Name = "RightLangFrame"
+    rightLangFrame.Parent = screenGui
+    rightLangFrame.BackgroundColor3 = Color3.fromRGB(32, 33, 36)
+    rightLangFrame.BorderSizePixel = 0
+    rightLangFrame.Position = UDim2.new(1, -210, 0.5, -150)
+    rightLangFrame.Size = UDim2.new(0, 200, 0, 300)
+    rightLangFrame.Visible = false
+    rightLangFrame.ZIndex = 2
+    
+    local rightLangCorner = Instance.new("UICorner")
+    rightLangCorner.CornerRadius = UDim.new(0, 12)
+    rightLangCorner.Parent = rightLangFrame
+    
+    local function createLangSelectionFrame(frame, isLeft)
+        for _, child in ipairs(frame:GetChildren()) do
+            child:Destroy()
+        end
+        
+        local header = Instance.new("Frame")
+        header.Name = "Header"
+        header.Parent = frame
+        header.BackgroundColor3 = Color3.fromRGB(32, 33, 36)
+        header.BorderSizePixel = 0
+        header.Size = UDim2.new(1, 0, 0, 40)
+        
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.Parent = header
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1, 0, 1, 0)
+        title.Font = Enum.Font.GothamBold
+        title.Text = "Select Language"
+        title.TextColor3 = Color3.fromRGB(232, 234, 237)
+        title.TextSize = 14
+        
+        local closeButton = Instance.new("TextButton")
+        closeButton.Name = "CloseButton"
+        closeButton.Parent = header
+        closeButton.BackgroundTransparency = 1
+        closeButton.Position = UDim2.new(1, -35, 0, 0)
+        closeButton.Size = UDim2.new(0, 35, 1, 0)
+        closeButton.Font = Enum.Font.GothamBold
+        closeButton.Text = "×"
+        closeButton.TextColor3 = Color3.fromRGB(232, 234, 237)
+        closeButton.TextSize = 18
+        
+        local searchBox = Instance.new("TextBox")
+        searchBox.Name = "SearchBox"
+        searchBox.Parent = frame
+        searchBox.BackgroundColor3 = Color3.fromRGB(48, 49, 52)
+        searchBox.BorderSizePixel = 0
+        searchBox.Position = UDim2.new(0, 10, 0, 50)
+        searchBox.Size = UDim2.new(1, -20, 0, 30)
+        searchBox.Font = Enum.Font.Gotham
+        searchBox.PlaceholderText = "Search..."
+        searchBox.PlaceholderColor3 = Color3.fromRGB(154, 160, 166)
+        searchBox.Text = ""
+        searchBox.TextColor3 = Color3.fromRGB(232, 234, 237)
+        searchBox.TextSize = 12
+        
+        local searchCorner = Instance.new("UICorner")
+        searchCorner.CornerRadius = UDim.new(0, 6)
+        searchCorner.Parent = searchBox
+        
+        local scrollFrame = Instance.new("ScrollingFrame")
+        scrollFrame.Name = "ScrollFrame"
+        scrollFrame.Parent = frame
+        scrollFrame.BackgroundTransparency = 1
+        scrollFrame.BorderSizePixel = 0
+        scrollFrame.Position = UDim2.new(0, 10, 0, 90)
+        scrollFrame.Size = UDim2.new(1, -20, 1, -100)
+        scrollFrame.ScrollBarThickness = 3
+        scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(60, 64, 67)
+        
+        local layout = Instance.new("UIListLayout")
+        layout.Parent = scrollFrame
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Padding = UDim.new(0, 3)
+        
+        local function updateLangButtons()
+            for _, child in ipairs(scrollFrame:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child:Destroy()
+                end
+            end
+            
+            local searchText = string.lower(searchBox.Text)
+            
+            for _, lang in ipairs(languageData) do
+                if searchText == "" or string.find(string.lower(lang.Name), searchText) then
+                    local langButton = Instance.new("TextButton")
+                    langButton.Name = lang.Name
+                    langButton.Parent = scrollFrame
+                    langButton.BackgroundColor3 = Color3.fromRGB(48, 49, 52)
+                    langButton.BorderSizePixel = 0
+                    langButton.Size = UDim2.new(1, 0, 0, 30)
+                    langButton.Font = Enum.Font.Gotham
+                    langButton.Text = lang.Name
+                    langButton.TextColor3 = Color3.fromRGB(232, 234, 237)
+                    langButton.TextSize = 12
+                    langButton.TextXAlignment = Enum.TextXAlignment.Left
+                    
+                    local buttonCorner = Instance.new("UICorner")
+                    buttonCorner.CornerRadius = UDim.new(0, 6)
+                    buttonCorner.Parent = langButton
+                    
+                    local padding = Instance.new("UIPadding")
+                    padding.Parent = langButton
+                    padding.PaddingLeft = UDim.new(0, 10)
+                    
+                    langButton.MouseButton1Click:Connect(function()
+                        if isLeft then
+                            sourceLanguage = lang.Code
+                            sourceLangButton.Text = lang.Name
+                        else
+                            targetLanguage = lang.Code
+                            targetLangButton.Text = lang.Name
+                        end
+                        
+                        local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                        local tween = TweenService:Create(frame, tweenInfo, {Size = UDim2.new(0, 0, 0, 300)})
+                        tween:Play()
+                        tween.Completed:Connect(function()
+                            frame.Visible = false
+                            frame.Size = UDim2.new(0, 200, 0, 300)
+                        end)
+                        
+                        if inputBox.Text ~= "" then
+                            local translated = translate(inputBox.Text, targetLanguage, sourceLanguage)
+                            if translated then
+                                outputLabel.TextColor3 = Color3.fromRGB(232, 234, 237)
+                                outputLabel.Text = translated
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+        
+        
+                searchBox:GetPropertyChangedSignal("Text"):Connect(updateLangButtons)
+        closeButton.MouseButton1Click:Connect(function()
+            local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local tween = TweenService:Create(frame, tweenInfo, {Size = UDim2.new(0, 0, 0, 300)})
+            tween:Play()
+            tween.Completed:Connect(function()
+                frame.Visible = false
+                frame.Size = UDim2.new(0, 200, 0, 300)
+            end)
+        end)
+        
+        updateLangButtons()
+    end
+    
+    local function showLangSelection(isSource)
+        local frame = isSource and leftLangFrame or rightLangFrame
+        local otherFrame = isSource and rightLangFrame or leftLangFrame
+        
+        otherFrame.Visible = false
+        
+        createLangSelectionFrame(frame, isSource)
+        
+        frame.Visible = true
+        frame.Size = UDim2.new(0, 0, 0, 300)
+        
+        local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local tween = TweenService:Create(frame, tweenInfo, {Size = UDim2.new(0, 200, 0, 300)})
+        tween:Play()
+    end
+    
+    sourceLangButton.MouseButton1Click:Connect(function()
+        showLangSelection(true)
+    end)
+    
+    targetLangButton.MouseButton1Click:Connect(function()
+        showLangSelection(false)
+    end)
+    
+    swapButton.MouseButton1Click:Connect(function()
+        local tempLang = sourceLanguage
+        local tempName = sourceLangButton.Text
+        
+        sourceLanguage = targetLanguage
+        sourceLangButton.Text = targetLangButton.Text
+        
+        targetLanguage = tempLang
+        targetLangButton.Text = tempName
+        
+        if inputBox.Text ~= "" then
+            local translated = translate(inputBox.Text, targetLanguage, sourceLanguage)
+            if translated then
+                outputLabel.TextColor3 = Color3.fromRGB(232, 234, 237)
+                outputLabel.Text = translated
+            end
+        end
+    end)
+    
+    inputBox:GetPropertyChangedSignal("Text"):Connect(function()
+        if inputBox.Text == "" then
+            outputLabel.TextColor3 = Color3.fromRGB(154, 160, 166)
+            outputLabel.Text = "Translation"
+            return
+        end
+        
+        local translated = translate(inputBox.Text, targetLanguage, sourceLanguage)
+        if translated then
+            outputLabel.TextColor3 = Color3.fromRGB(232, 234, 237)
+            outputLabel.Text = translated
+        end
+    end)
+    
+    copyButton.MouseButton1Click:Connect(function()
+        if outputLabel.Text ~= "Translation" then
+            setclipboard(outputLabel.Text)
+        end
+    end)
+    
+    closeButton.MouseButton1Click:Connect(function()
+        screenGui:Destroy()
+    end)
+    
+    local dragging = false
+    local dragInput, dragStart, startPos
+    
+    local function update(input)
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+LoadScript()
